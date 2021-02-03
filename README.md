@@ -4,7 +4,7 @@ Counter-Strike map installer developed in bash during this damned COVID-19 pande
 ## Description
 This script helps you to copy or upload map files directly into game folder. It has many features such as:
 
-- Validate game and fastDL folders (Locally or remotely)
+- Find and validate game and fastDL folders (Locally or remotely) automatically
 - Check integrity and uncompress ZIP and RAR files directly
 - Copy files to local or remote (via SSH/SCP) game folder
 - Compress map files into bz2 archive
@@ -39,16 +39,19 @@ The following libraries will be installed automatically in case of your system d
 -r         Set remote game server to transfer files via SCP (eg.: username@server.domain:port)
 -d         Set remote fastdl server to transfer files via SCP (eg.: username@server.domain:port)
 -u         Unset game, fastdl and remote parameters to use default paths (You can edit this script to set your own paths)
-           GAME_PATH="/home/user/cstrike/maps"
+           GAME_PATH="/home/user/cstrike"
            FASTDL_PATH="/var/www/html/css/maps"
            GAME_REMOTE_SERVER="user@servername:port"
            FASTDL_REMOTE_SERVER="user@servername:port"
 -v         Set verbose information enabled. If you want to use it, must be the first command. (Do you really wanna see all the process details?)
 ```
 
+## Compatibility
+This script is compatible with CS 1.6, CS: Condition Zero and CS: Source.
+
 ## Special thanks
 * Thanks to Gonza (@Mirko) to provide servers and his life-time to test this script.
 * And many thanks to my brother/friends to back to the past enjoying this wonderful game with a 🍺 at my side!
 
 ---
-⌨️ with ❤️ by [4r13lx](https://github.com/4r13lx) 😊
+⌨️ with ❤️ by [4r13lx](https://github.com/4r13lx) or @JasonBourne (CS nickname) 😊
