@@ -1,21 +1,28 @@
 # CS-Map-Installer
-Counter-Strike map installer developed in bash
+Counter-Strike map installer developed in bash during this damned COVID-19 pandemic.
 
-# Description
-This script helps you to copy or upload map files directly into game folder. It has manu features such as:
+## Description
+This script helps you to copy or upload map files directly into game folder. It has many features such as:
 
-1- Validate game and fastDL folders (Locally or remotely)
-2- Check integrity and uncompress ZIP and RAR files directly
-3- Copy files to the local or remote (via SSH/SCP) game folder
-4- Compress map files into bz2 archive
-5- Upload bz2 file to the local or remote fastDL server
+- Validate game and fastDL folders (Locally or remotely)
+- Check integrity and uncompress ZIP and RAR files directly
+- Copy files to local or remote (via SSH/SCP) game folder
+- Compress map files into bz2 archive
+- Upload bz2 file to the local or remote fastDL server
 
-# Usage
-Try the following execution methods (Could be possible you need to use sudo elevate permissions to hold temps file into '/tmp' system folder):
+## Install
+As you know, download and copy it into your maps folder. What map folder? The map folder that you previously created to download and store all maps downloaded from any cs maps page.
+I highly recommend to you to leave this script into the map folder because sometimes, depends on GNU/Linux distribution, do not recongnize the paths when you pass them by argument.
+
+## Usage
+Try the following execution methods (Could be possible you need to use 'sudo' elevate permissions to hold temp files into '/tmp' system folder):
 Use "./" or "sh" command to execute it.
-1) sh css_MapInstaller -g [GAME_PATH] -m [MAP_PATH] 	  - Copy local files
-2) sh css_MapInstaller -v -g [GAME_PATH] -m [MAP_PATH]  - Shows detailed information (Verbose activated)
-3) sh css_MapInstaller -v -u -m [MAP_PATH] 			        - Use default paths and shows detailed information (Verbose activated and using default paths)
+
+```
+1) sh css_MapInstaller -g [GAME_PATH] -m [MAP_PATH]    - Copy local files
+2) sh css_MapInstaller -v -g [GAME_PATH] -m [MAP_PATH] - Shows detailed information (Verbose activated)
+3) sh css_MapInstaller -v -u -m [MAP_PATH]             - Use default paths and shows detailed information (Verbose activated and using default paths)
+```
 
 The following libraries will be installed automatically in case of your system does not have them:
 - unzip
@@ -23,7 +30,8 @@ The following libraries will be installed automatically in case of your system d
 - sshpass
 - bzip2
 
-# Commands
+## Commands
+```
 -h         Display help
 -g         Set game path in which reside folders such as 'maps', 'materials', 'sound', etc.
 -m         Set map path in which reside map file downloaded (compressed)
@@ -35,4 +43,12 @@ The following libraries will be installed automatically in case of your system d
            FASTDL_PATH="/var/www/html/css/maps"
            GAME_REMOTE_SERVER="user@servername:port"
            FASTDL_REMOTE_SERVER="user@servername:port"
--v		   Set verbose information enabled. If you want to use it, must be the first command. (Do you really wanna see all the process details?)
+-v         Set verbose information enabled. If you want to use it, must be the first command. (Do you really wanna see all the process details?)
+```
+
+## Special thanks
+* Thanks to Gonza (@Mirko) to provide servers and his life-time to test this script.
+* And many thanks to my brother/friends to back to the past enjoying this wonderful game with a 🍺 at my side!
+
+---
+⌨️ with ❤️ by [4r13lx](https://github.com/4r13lx) 😊
