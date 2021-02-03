@@ -1,0 +1,406 @@
+#!/bin/bash
+
+#------------------------------------Authory-----------------------------------#
+# CSS Map Installer v1.1 RC
+# Created date: Dec-11-2020
+# Last update:	Jan-26-2021
+# Created, developed and manitained by 4r13lx (@JasonBourne - CS nickname)
+# Special thanks to Gonza (@Mirko) to provide servers and his life-time to test this script
+# Feel free to fork this script but always under the GNU General Public License (GPL)
+
+#Global Variables
+MAP_TEMP="/tmp/css_maps"
+REMOTE_PROCESS=0
+VERBOSE=0
+
+#------------------------------------Functions-----------------------------------#
+
+#Show help and hot to usa this script
+showHelp() {
+# `cat << EOF` This means that cat should stop reading when EOF is detected
+cat << EOF 
+Usage
+------------------------------------
+Try the following execution methods (Could be possible you need to use sudo elevate permissions):
+1) ./css_MapInstaller -g 'game path' -m 'map path' -f 'fastdl path'
+2) sh css_MapInstaller.sh -g 'game path' -m 'map path' -f 'fastdl path'
+
+The following libraries will be installed in case of your system does not have them:
+- unzip
+- unrar
+- sshpass
+- bzip2
+
+Commands
+-----------------------------------
+-h         Display help
+-g         Set game path in which reside folders such as 'maps', 'materials', 'sound', etc.
+-m         Set map path in which reside map file downloaded (compressed)
+-f         Set fast downloader map path to allocate compressed file
+-r         Set remote game server to transfer files via SCP (eg.: username@server.domain:port)
+-d         Set remote fastdl server to transfer files via SCP (eg.: username@server.domain:port)
+-u         Unset game, fastdl and remote parameters to use default paths (You can edit this script to set your own paths)
+           GAME_PATH="/home/steam/cstrike"
+           FASTDL_PATH="/var/www/html/css/maps"
+           GAME_REMOTE_SERVER="user@servername:port"
+           FASTDL_REMOTE_SERVER="user@servername:port"
+-v		   Set verbose information enabled. If you want to use it, must be the first command. (Do you really wanna see all the process details?)
+
+Usage
+-----------------------------------
+sh css_MapInstaller -g [GAME_PATH] -m [MAP_PATH] 	- Copy local files
+sh css_MapInstaller -v -g [GAME_PATH] -m [MAP_PATH] - Shows detailed information
+sh css_MapInstaller -v -u -m [MAP_PATH] 			- Use default paths and shows detailed information
+
+
+EOF
+# EOF is found above and hence cat command stops reading. This is equivalent to echo but much neater when printing out.
+}
+
+#Colorize echo messages
+function coloredEcho(){
+    local exp=$1;
+    local color=$2;
+    local bold=$3
+    if ! [[ $color =~ '^[0-9]$' ]] ; then
+       case $(echo $color | tr '[:upper:]' '[:lower:]') in
+        black) color=0 ;;
+        red) color=1 ;;
+        green) color=2 ;;
+        yellow) color=3 ;;
+        blue) color=4 ;;
+        magenta) color=5 ;;
+        cyan) color=6 ;;
+        white|*) color=7 ;; # white or invalid color
+       esac
+    fi
+    tput setaf $color;
+    tput $bold;
+    echo $exp;
+    tput sgr0;
+}
+
+#Show welcome message
+function WelcomeMessage(){
+ clear
+ coloredEcho "CSS Map Installer Script - v1.1 RC" yellow bold
+ coloredEcho "Developed by JasonBourne | Special thanks to Orion!" yellow bold
+ coloredEcho "---------------------------------------------------" yellow bold
+}
+
+#Check and install package dependencies
+function CheckDependencies(){
+ for pkg in $1
+ do
+  REQUIRED_PKG="$pkg"
+  PKG_OK=$(dpkg-query -W --showformat='${Status}\n' $REQUIRED_PKG|grep "install ok installed")
+  echo "Checking for $REQUIRED_PKG: $PKG_OK"
+  if [ "" = "$PKG_OK" ]; then
+    echo "No $REQUIRED_PKG. Setting up $REQUIRED_PKG."
+    sudo apt-get update
+    sudo apt-get --yes install $REQUIRED_PKG 
+  fi
+ done
+}
+
+#Check if the directories exists
+function CheckDirectoryExists(){
+ DIRECTORY=$1
+ if [[ -d "$DIRECTORY" ]]; then
+  echo "$DIRECTORY directory was found!"
+  return $DIRECTORY
+ else
+  coloredEcho "$DIRECTORY directory was not found!" red bold
+  return $DIRECTORY
+ fi
+}
+
+#Check compressed file integrity
+function CheckFileIntegrity(){
+ MAP_PATH=$1
+ MAP_FILE_EXTENSION="${MAP_PATH##*.}"
+ 
+ case "${MAP_FILE_EXTENSION}" in
+  zip) sudo unzip -t $MAP_PATH;;
+  rar) sudo unrar t $MAP_PATH;;
+ esac
+}
+
+#Uncompress compressed files (Only ZIP or RAR)
+function UncompressFile(){
+ MAP_PATH=$1
+ MAP_FILE_EXTENSION="${MAP_PATH##*.}"
+
+ case "${MAP_FILE_EXTENSION}" in
+  zip) sudo unzip -e $MAP_PATH -d $MAP_TEMP;;
+  rar) sudo mkdir /tmp/css_maps; sudo unrar e $MAP_PATH $MAP_TEMP;;
+ esac
+
+echo "$MAP_PATH $MAP_TEMP"
+}
+
+#Compress fastDL file with map files
+function CompressFastdlMaps(){
+ packageFile=$(find "$MAP_TEMP" -type f -name "*.bsp" | xargs basename -s .bsp);
+ find "$MAP_TEMP" -type f \( -name "*.bsp" \) -print0 | xargs -0 sudo bzip2 -vf9 "$packageFile.bz2" ;
+}
+
+#Find directories
+function FindDirectory(){
+PATH=$1
+DIRECTORY=$2
+
+ for OBJ in $PATH/*; do
+  #[ -d "${OBJ}" ] || continue # if not a directory, skip
+  if [ "${OBJ##*/}" = "$DIRECTORY" ]; then
+   echo "${OBJ}"
+  fi
+ done
+}
+
+#Set default paths for game, maps, and remote servers
+function SetDefaultPaths(){
+ GAME_PATH="/home/steam/cstrike"
+ MAP_PATH=$MAP_PATH
+ GAME_REMOTE_SERVER="user@servername:port"
+ FASTDL_REMOTE_SERVER="user@servername:port"
+ FASTDL_PATH="/var/www/html/css/maps"
+}
+
+#Check if the local or remote folders exists
+function CheckFolders(){
+ if [[ $REMOTE_PROCESS == 1 ]]; then
+  coloredEcho "Validating remote folders structure on $GAME_PATH..." cyan bold;
+  arrRemoteGame=(${GAME_REMOTE_SERVER//:/ })
+  results=$(sshpass -p $GAME_REMOTE_SERVER_PASS ssh -o StrictHostKeyChecking=no "${arrRemoteGame[0]}" "-p ${arrRemoteGame[1]}" "$(typeset -f FindDirectory);
+  FindDirectory "$GAME_PATH" "maps";
+  FindDirectory "$GAME_PATH" 'sound';
+  FindDirectory "$GAME_PATH" 'models';
+  FindDirectory "$GAME_PATH" 'materials';");
+  #echo "$results"
+  arrResults=(${results// / });
+  GAME_MAPS_PATH="${arrResults[0]}"
+  GAME_SOUND_PATH="${arrResults[1]}"
+  GAME_MODELS_PATH="${arrResults[2]}"
+  GAME_MATERIALS_PATH="${arrResults[3]}"
+ else
+  coloredEcho "Validating local folders structure on $GAME_PATH..." cyan bold;
+  GAME_MAPS_PATH=$(FindDirectory $GAME_PATH "maps")
+  GAME_SOUND_PATH=$(FindDirectory $GAME_PATH "sound")
+  GAME_MODELS_PATH=$(FindDirectory $GAME_PATH "models")
+  GAME_MATERIALS_PATH=$(FindDirectory $GAME_PATH "materials")
+ fi
+ 
+ #echo "GAME_MAPS_PATH: '$GAME_MAPS_PATH'"
+ #echo "GAME_SOUND_PATH: '$GAME_SOUND_PATH'"
+ #echo "GAME_MODELS_PATH: '$GAME_MODELS_PATH'"
+ #echo "GAME_MATERIALS_PATH: '$GAME_MATERIALS_PATH'"
+
+ if [[ "$GAME_MAPS_PATH" != "" ]]; then
+   coloredEcho "MAPS PATH: '$GAME_MAPS_PATH' folder found!" green bold;
+  else
+   coloredEcho " MAPS PATH: '$GAME_PATH/maps' folder not found!" red bold;
+ fi
+ if [[ "$GAME_SOUND_PATH" != "" ]]; then
+   coloredEcho "SOUND PATH: '$GAME_SOUND_PATH' folder found!" green bold;
+  else
+   coloredEcho "SOUND PATH: '$GAME_PATH/sound' folder not found!" red bold;
+ fi
+ if [[ "$GAME_MODELS_PATH" != "" ]]; then
+   coloredEcho "MODELS PATH: '$GAME_MODELS_PATH' folder found!" green bold;
+  else
+   coloredEcho "MODELS PATH: '$GAME_PATH/models' folder not found!" red bold;
+ fi
+ if [[ "$GAME_MATERIALS_PATH" != "" ]]; then
+   coloredEcho "MATERIALS PATH: '$GAME_MATERIALS_PATH' folder found!" green bold;
+  else
+   coloredEcho "MATERIALS PATH: '$GAME_PATH/materials' folder not found!" red bold;
+ fi
+
+#Prompt to user if want to continue or finish the process right now in case of one or more folders does not exists
+if [[ "$GAME_MAPS_PATH" == "" || "$GAME_SOUND_PATH" == "" || "$GAME_MODELS_PATH" == "" || "$GAME_MATERIALS_PATH" == "" ]]; then
+  response=""
+  read -p "One or more folders does not exists. Do you want continue? (y/n) " response
+  if [[ $response != "y" ]]; then
+   echo
+   echo
+   exit 1
+  fi
+  echo
+fi
+}
+
+#Copy game files into correct folders
+function CopyGameFiles(){
+ arrRemoteGame=(${GAME_REMOTE_SERVER//:/ })
+ if [[ $REMOTE_PROCESS == 1 ]]; then
+  if [[ $VERBOSE == 1 ]]; then
+   COPY_COMMAND="sshpass -v -p $GAME_REMOTE_SERVER_PASS scp -v -P ${arrRemoteGame[1]} {} ${arrRemoteGame[0]}:"
+  else
+   COPY_COMMAND="sshpass -p $GAME_REMOTE_SERVER_PASS scp -P ${arrRemoteGame[1]} {} ${arrRemoteGame[0]}:"
+  fi
+ else
+  if [[ $VERBOSE == 1 ]]; then
+   COPY_COMMAND="cp -av {} "
+  else
+   COPY_COMMAND="cp -a {} "
+  fi
+ fi
+ 
+ #Copy the files ending in the "bsp," "txt" and "nav" extension to the Maps folder
+ coloredEcho "Copying map files to 'Maps' folder..." blue bold
+ if [[ -d "$GAME_MAPS_PATH" || "$GAME_REMOTE_SERVER" != "" ]]; then
+  find "$MAP_TEMP" -type f \( -iname "*.bsp" -or -iname "*.txt" -or -iname "*.nav" \) -exec $COPY_COMMAND$GAME_MAPS_PATH \; -exec echo "{} -> $GAME_MAPS_PATH - OK" \;
+ fi
+ 
+ #Copy files ending in the "wav" extension to the "Sound" folder
+ coloredEcho "Copying wav, mp3 files to 'Sound' folder..." blue bold
+ if [[ -d "$GAME_SOUND_PATH" || "$GAME_REMOTE_SERVER" != "" ]]; then
+  find "$MAP_TEMP" -type f \( -iname "*.wav" -or -iname "*.mp3" \) -exec $COPY_COMMAND$GAME_SOUND_PATH \; -exec echo "{} -> $GAME_SOUND_PATH - OK" \;
+ fi
+ 
+ #Copy files ending in the "vtx," "mdl," "phy" and "vvd" extensions to the "Models" folder
+ coloredEcho "Copying vtx, mdl, phy and vvd files to 'Models' folder..." blue bold
+ if [[ -d "$GAME_MODELS_PATH" || "$GAME_REMOTE_SERVER" != "" ]]; then
+  find "$MAP_TEMP" -type f \( -iname "*.vtx" -or -iname "*.dml" -or -iname "*.phy" -or -iname "*.vvd" \) -exec $COPY_COMMAND$GAME_MODELS_PATH \; -exec echo "{} -> $GAME_MODELS_PATH - OK" \;
+ fi
+ 
+ #Copy files ending in the "vmt" or "vtf" extensions to the "Materials" folder
+ coloredEcho "Copying vmt, vtf files to 'Materials' folder..." blue bold
+ if [[ -d "$GAME_MATERIALS_PATH" || "$GAME_REMOTE_SERVER" != "" ]]; then
+  find "$MAP_TEMP" -type f \( -iname "*.vmt" -or -iname "*.vtf" \) -exec $COPY_COMMAND$GAME_MATERIALS_PATH \; -exec echo "{} -> $GAME_MATERIALS_PATH - OK" \;
+ fi
+}
+
+#Copy compressed tar.bz2 file to remote fastDL server
+function CopyFastdlFile(){
+ arrRemoteFastDL=(${FASTDL_REMOTE_SERVER//:/ })
+ if [[ "$FASTDL_REMOTE_SERVER" != "" ]]; then
+  if [[ $VERBOSE == 1 ]]; then
+    COPY_COMMAND="sshpass -v -p $FASTDL_REMOTE_SERVER_PASS scp -v -P ${arrRemoteFastDL[1]} {} ${arrRemoteFastDL[0]}:"
+   else
+    COPY_COMMAND="sshpass -p $FASTDL_REMOTE_SERVER_PASS scp -P ${arrRemoteFastDL[1]} {} ${arrRemoteFastDL[0]}:"
+   fi
+ else
+  if [[ $VERBOSE == 1 ]]; then
+   COPY_COMMAND="cp -av {} "
+  else
+   COPY_COMMAND="cp -a {} "
+  fi
+ fi
+ 
+ if [[ -d "$FASTDL_PATH" || "$FASTDL_REMOTE_SERVER" != "" ]]; then
+  results=$(sshpass -p $GAME_REMOTE_SERVER_PASS ssh -o StrictHostKeyChecking=no "${arrRemoteFastDL[0]}" "-p ${arrRemoteFastDL[1]}" "$(typeset -f FindDirectory);");
+  find "$MAP_TEMP" -type f \( -iname "*.bz2" \) -exec $COPY_COMMAND$FASTDL_PATH \; -exec echo "{} -> $FASTDL_PATH - OK" \;
+ fi
+}
+
+#Set if the script must run on local or remote machine
+function SetRemoteLocalProcess(){
+if [[ "$DEFAULT_PATHS" == "yes" || "$GAME_REMOTE_SERVER" != "" ]]; then
+ REMOTE_PROCESS=1;
+else
+ REMOTE_PROCESS=0;
+fi
+}
+
+#------------------------------------Main thread-----------------------------------#
+
+#Welcome message
+WelcomeMessage
+
+#Get input parameters
+while getopts hg:m:f:r:d:uv option
+do
+ case "${option}" in
+  h) showHelp; exit;;
+  u) DEFAULT_PATHS="yes"; SetDefaultPaths;;
+  g) GAME_PATH=${OPTARG};;
+  m) MAP_PATH=${OPTARG};;
+  f) FASTDL_PATH=${OPTARG};;
+  r) GAME_REMOTE_SERVER=${OPTARG};;
+  d) FASTDL_REMOTE_SERVER=${OPTARG};;
+  v) VERBOSE=1;;
+ esac
+done
+
+#Set remote or local process
+SetRemoteLocalProcess
+
+#Show working paths
+coloredEcho "Map path: $MAP_PATH" cyan bold
+coloredEcho "Game path: $GAME_PATH" cyan bold
+coloredEcho "FastDL path: $FASTDL_PATH" cyan bold
+if [ $REMOTE_PROCESS == 1 ]; then
+ coloredEcho "Game server: $GAME_REMOTE_SERVER" cyan bold
+else
+ coloredEcho "Game server: localhost" cyan bold
+fi
+coloredEcho "FastDL server: $FASTDL_REMOTE_SERVER" cyan bold
+echo ""
+
+#requesting remote game password
+if [[ "$GAME_REMOTE_SERVER" != "" ]]; then
+ read -s -p "Please, enter SSH password for remote game server: " GAME_REMOTE_SERVER_PASS
+ #GAME_REMOTE_SERVER_PASS=""
+ #coloredEcho "password entered: $GAME_REMOTE_SERVER_PASS" red bold
+ echo ""
+fi
+if [[ "$FASTDL_REMOTE_SERVER" != "" ]]; then
+ read -s -p "Please, enter SSH password for remote FastDL server: " FASTDL_REMOTE_SERVER_PASS
+ #FASTDL_REMOTE_SERVER_PASS=""
+ #coloredEcho "password entered: $GAME_REMOTE_SERVER_PASS" red bold
+ echo ""
+fi
+#echo ""
+
+#Check pkg dependencies
+coloredEcho "Checking package dependencies..." blue bold
+CheckDependencies "unrar unzip sshpass bzip2"
+
+# Check folders
+coloredEcho "Checking folder game path..." blue bold
+CheckFolders
+
+
+#Check if the map file is compressed, check integrity and uncompress the files in tmp folder
+coloredEcho "Checking integrity and uncompressing map files..." blue bold
+CheckFileIntegrity $MAP_PATH
+UncompressFile $MAP_PATH
+
+coloredEcho "Checking map files..." blue bold
+coloredEcho "Maps files..." magenta bold
+find "$MAP_TEMP" -type f -iname "*.bsp" -o -iname "*.txt" -o -iname "*.nav"
+coloredEcho "Sound files..." magenta bold
+find "$MAP_TEMP" -type f -iname "*.wav" -o -iname "*.mp3"
+coloredEcho "Models files..." magenta bold
+find "$MAP_TEMP" -type f -iname "*.vtx" -o -iname "*.mdl" -o -iname "*.phy" -o -iname "*.vvd"
+coloredEcho "Materials files..." magenta bold
+find "$MAP_TEMP" -type f -iname "*.vmt" -o -iname "*.vtf"
+
+#Copying game files to local or remote paths
+coloredEcho "Copying game files..." blue bold
+CopyGameFiles
+
+#Create FastDL compressed file and upload it to FastDL server
+if [[ $REMOTE_PROCESS == 1 ]]; then
+ coloredEcho "Creating BZIP2 file and copying it to remote server..." blue bold
+ CompressFastdlMaps
+ CopyFastdlFile
+fi
+
+#Delete all temporary files created during the process
+coloredEcho "Deleting temporary files..." blue bold
+if [ $VERBOSE == 1 ]; then
+ sudo rm -vr $MAP_TEMP
+else
+ sudo rm -r $MAP_TEMP
+ coloredEcho "All files and folders were deleted successfully!" green bold
+fi
+
+#Process finished!
+echo ""
+echo ""
+coloredEcho "PROCESS COMPLETED!" green bold
+echo ""
+echo ""
